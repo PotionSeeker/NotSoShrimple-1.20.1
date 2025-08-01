@@ -1,35 +1,35 @@
-
-modLoader="javafml" #mandatory
-loaderVersion="[43,)" #mandatory
+modLoader="javafml"
+loaderVersion="[47,)"
 license="MIT"
-[[mods]] #mandatory
-modId="notsoshrimple" #mandatory
-version="1.1" #mandatory
-displayName="Not So Shrimple" #mandatory
-logoFile="examplemod.png" #optional
-credits="Very special thanks to Alpha, Gec Master#7889 for the model and textures!" #optional
-authors="Peeko32213" #optional
+
+[[mods]]
+modId="notsoshrimple"
+version="1.2"
+displayName="Not So Shrimple"
+logoFile="icon.png"
+credits="Very special thanks to Alpha, Gec Master#7889 for the model and textures!"
+authors="Peeko32213"
 description='''
 It's Kinda shrimple if you think about it
 '''
 
 [[dependencies.notsoshrimple]]
-    modId="forge"
-    mandatory=true
-    versionRange="[43,)"
-    ordering="NONE"
-    side="BOTH"
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"
 
 [[dependencies.notsoshrimple]]
-    modId="minecraft"
-    mandatory=true
-    versionRange="[1.19.2,1.20)"
-    ordering="NONE"
-    side="BOTH"
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"
 
 [[dependencies.notsoshrimple]]
-    modId="geckolib3"
-    mandatory=true
-    versionRange="[3.1.27,3.1.39]"
-    ordering="BEFORE"
-    side="BOTH"
+modId="geckolib"
+mandatory=true
+versionRange="[4.2.3,)"
+ordering="BEFORE"
+side="BOTH"
