@@ -6,11 +6,12 @@ import com.peeko32213.notsoshrimple.NotSoShrimple;
 import com.peeko32213.notsoshrimple.common.entity.EntityManeaterShell;
 import net.minecraft.Util;
 import net.minecraft.resources.ResourceLocation;
-import software.bernie.geckolib3.model.AnimatedGeoModel;
+//import software.bernie.geckolib3.model.AnimatedGeoModel;
+import software.bernie.geckolib.model.GeoModel;
 
 import java.util.Map;
 
-public class ManeaterModel extends AnimatedGeoModel<EntityManeaterShell>{
+public class ManeaterModel extends GeoModel<EntityManeaterShell>{
 
     public static final Map<Integer, ResourceLocation> TEXTURES = Util.make(Maps.newHashMap(), (hashMap) -> {
         hashMap.put(0, new ResourceLocation(NotSoShrimple.MODID, "textures/entity/maneater_shell.png"));

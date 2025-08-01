@@ -1,6 +1,6 @@
 package com.peeko32213.notsoshrimple.client;
 
-import com.peeko32213.notsoshrimple.common.entity.EntityToxicWater;
+//import com.peeko32213.notsoshrimple.common.entity.EntityToxicWater;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;

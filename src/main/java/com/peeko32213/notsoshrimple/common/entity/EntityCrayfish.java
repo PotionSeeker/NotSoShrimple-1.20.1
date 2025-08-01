@@ -8,6 +8,7 @@ import com.peeko32213.notsoshrimple.core.registry.NSSTags;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -18,10 +19,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.DifficultyInstance;
-import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.*;
@@ -49,25 +50,30 @@ import net.minecraft.world.level.pathfinder.*;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
-import software.bernie.geckolib3.core.IAnimatable;
-import software.bernie.geckolib3.core.PlayState;
-import software.bernie.geckolib3.core.builder.AnimationBuilder;
-import software.bernie.geckolib3.core.controller.AnimationController;
-import software.bernie.geckolib3.core.event.predicate.AnimationEvent;
-import software.bernie.geckolib3.core.manager.AnimationData;
-import software.bernie.geckolib3.core.manager.AnimationFactory;
-import software.bernie.geckolib3.util.GeckoLibUtil;
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.SingletonGeoAnimatable;
+import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.core.animation.*;
+import software.bernie.geckolib.core.animation.AnimationState;
+import software.bernie.geckolib.core.object.PlayState;
+import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
 import java.util.EnumSet;
 
-
-public class EntityCrayfish extends Monster implements IAnimatable {
+public class EntityCrayfish extends Monster implements GeoEntity {
+    // Animation constants for Geckolib v4
+    private static final RawAnimation RIGHT_CLAW_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.rightclaw");
+    private static final RawAnimation LEFT_CLAW_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.leftclaw");
+    private static final RawAnimation SLAM_ANIM = RawAnimation.begin().thenPlay("animation.crayfish.slam");
+    private static final RawAnimation SNIPE_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.snipe");
+    private static final RawAnimation WALK_ANIM = RawAnimation.begin().thenLoop("animation.crayfish.walk");
+    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("animation.crayfish.idle");
     private static final EntityDataAccessor<Integer> ANIMATION_STATE = SynchedEntityData.defineId(EntityCrayfish.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> COMBAT_STATE = SynchedEntityData.defineId(EntityCrayfish.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> ENTITY_STATE = SynchedEntityData.defineId(EntityCrayfish.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> VARIANT = SynchedEntityData.defineId(EntityCrayfish.class, EntityDataSerializers.INT);
-    private AnimationFactory factory = GeckoLibUtil.createFactory(this);
+    private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
     public MobType getMobType() {
         return MobType.ARTHROPOD;
@@ -77,63 +83,36 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     public Vec3 newPos;
     public Vec3 velocity;
     public double directionlessSpeed;
-    public int biomeVariant;
-    //0 = swamp, 1 = ice, 2 = blood for biomeVariant;
-
+    public int biomeVariant; // 0 = swamp, 1 = ice, 2 = blood
 
     public EntityCrayfish(EntityType<? extends Monster> entityType, Level level) {
         super(entityType, level);
-        this.maxUpStep = 1.0f;
+        this.setMaxUpStep(1.0f);
         this.oldPos = this.position();
         this.newPos = this.position();
+        SingletonGeoAnimatable.registerSyncedAnimatable(this);
     }
-
-    /*@Override
-    public void maybeDisableShield(Player pPlayer, ItemStack pMobItemStack, ItemStack pPlayerItemStack) {
-        if (!pPlayerItemStack.isEmpty() && pPlayerItemStack.is(Items.SHIELD) && this.willItBreak == true) {
-            float f = 0.25F + (float) EnchantmentHelper.getBlockEfficiency(this) * 0.05F;
-            if (this.random.nextFloat() < f) {
-                pPlayer.getCooldowns().addCooldown(Items.SHIELD, 100);
-                this.level.broadcastEntityEvent(pPlayer, (byte)30);
-            }
-        }
-
-    }*/
 
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 400.0D)
                 .add(Attributes.ARMOR, 40.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.24D)
-                //0.29 fits the animation, remember to slow it
                 .add(Attributes.ATTACK_DAMAGE, 10.0D)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 10.5D)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0D)
                 .add(Attributes.FOLLOW_RANGE, 70D);
-        //health nerfed
-        //armour buffed
-        //we don't need knockback and damage tbh
-        //follow range affect tickrate, thus nerfed
     }
-
-
 
     protected void registerGoals() {
         super.registerGoals();
         this.goalSelector.addGoal(1, new EntityCrayfish.CrayfishMeleeAttackGoal(this, 2F, true));
-        //this is pretty much the same as UP's rexMeleeAttackGoal
         this.goalSelector.addGoal(3, new CustomRandomStrollGoal(this, 30, 1.0D, 100, 34));
         this.goalSelector.addGoal(9, new LookAtPlayerGoal(this, Player.class, 15.0F));
-        this.targetSelector.addGoal(2, (new HurtByTargetGoal(this)//{
-        //            public boolean canUse() {
-        //                return (this.mob.getLastHurtByMob() instanceof EntityCrayfish);
-        //            }
-        //    }
-        ));
+        this.targetSelector.addGoal(2, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, LivingEntity.class, 10, false, false, entity -> entity.getType().is(NSSTags.CRAYFISH_VICTIMS)));
         this.targetSelector.addGoal(0, new NearestAttackableTargetGoal<>(this, Player.class, true));
         this.goalSelector.addGoal(7, new RandomLookAroundGoal(this));
-        //perhaps instead of calculating the whole route each tick, only calculate the amount of blocks to be covered in a single tick and recalculate each tick?
     }
 
     public boolean canBreatheUnderwater() {
@@ -162,36 +141,21 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     }
 
     @Override
-    public void handleEntityEvent(byte pId) {
-        super.handleEntityEvent(pId);
-    }
-
-    @Override
     public void tick() {
-
-        /*loat speed = (float) (this.getMoveControl().getSpeedModifier() * this.getAttributeValue(Attributes.MOVEMENT_SPEED));
-        if (this.isInWater()) {
-            speed = speed * (1/this.getWaterSlowDown());
-        }
-        this.setSpeed(supposedd);*/
-
         this.oldPos = this.newPos;
         this.newPos = this.position();
         this.velocity = this.newPos.subtract(this.oldPos);
         this.directionlessSpeed = Math.abs(Math.sqrt((velocity.x * velocity.x) + (velocity.z * velocity.z) + (velocity.z * velocity.z)));
-        //System.out.println(this.directionlessSpeed);
         super.tick();
     }
 
     @Override
     protected float getWaterSlowDown() {
         return 1.0f;
-        //shrimps are not slowed by water
     }
 
     @Override
     public void customServerAiStep() {
-
         if (this.getMoveControl().hasWanted()) {
             this.setSprinting(this.getMoveControl().getSpeedModifier() >= 1.5D);
         } else {
@@ -203,17 +167,16 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     @Override
     public void aiStep() {
         super.aiStep();
-        if (this.horizontalCollision && net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(this.level, this) && this.isSprinting()) {
+        if (this.horizontalCollision && net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(this.level(), this) && this.isSprinting()) {
             boolean flag = false;
             AABB axisalignedbb = this.getBoundingBox().inflate(0.2D);
             for (BlockPos blockpos : BlockPos.betweenClosed(Mth.floor(axisalignedbb.minX), Mth.floor(axisalignedbb.minY), Mth.floor(axisalignedbb.minZ), Mth.floor(axisalignedbb.maxX), Mth.floor(axisalignedbb.maxY), Mth.floor(axisalignedbb.maxZ))) {
-                BlockState blockstate = this.level.getBlockState(blockpos);
+                BlockState blockstate = this.level().getBlockState(blockpos);
                 if (blockstate.is(NSSTags.CRAYFISH_BREAKABLES)) {
-                    flag = this.level.destroyBlock(blockpos, true, this) || flag;
+                    flag = this.level().destroyBlock(blockpos, true, this) || flag;
                 }
             }
         }
-
     }
 
     public boolean requiresCustomPersistence() {
@@ -225,38 +188,30 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     }
 
     public int getAnimationState() {
-
         return this.entityData.get(ANIMATION_STATE);
     }
 
     public void setAnimationState(int anim) {
-
         this.entityData.set(ANIMATION_STATE, anim);
     }
 
     public int getCombatState() {
-
         return this.entityData.get(COMBAT_STATE);
     }
 
     public void setCombatState(int anim) {
-
         this.entityData.set(COMBAT_STATE, anim);
     }
 
     public int getEntityState() {
-
         return this.entityData.get(ENTITY_STATE);
     }
 
     public void setEntityState(int anim) {
-
         this.entityData.set(ENTITY_STATE, anim);
     }
 
     static class CrayfishMeleeAttackGoal extends Goal {
-        //max attack cooldown is 20 ticks
-
         protected final EntityCrayfish mob;
         private final double speedModifier;
         private final boolean followingTargetEvenIfNotSeen;
@@ -271,23 +226,14 @@ public class EntityCrayfish extends Monster implements IAnimatable {
         private int failedPathFindingPenalty = 0;
         private boolean canPenalize = false;
         private int animTime = 0;
-
         private double targetOldX;
         private double targetOldY;
         private double targetOldZ;
         private int meleeRange = 75;
-        //the range(blocks) in which the shrimp would stay in melee mode. Adjust until perfect.
-        //this is NOT IN BLOCKS. I DO NOT KNOW WHAT UNIT THIS IS.
-        //update: this is in squared distance
-
         Vec3 slamOffSet = new Vec3(0, 0, 4);
         Vec3 pokeOffSet = new Vec3(0, 0.25, 5);
         Vec3 slashOffSet = new Vec3(0, -0.3, 2);
         Vec3 pissOffSet = new Vec3(0, 2, 2);
-        //the Y value is at the BOTTOM of the offset, and the hitbox is inflated up.
-        //the Z value dictates forwards/backwards.
-        //inflation acts on both sides of the thing.
-
 
         public CrayfishMeleeAttackGoal(EntityCrayfish theMob, double speedMod, boolean persistentMemory) {
             this.mob = theMob;
@@ -297,51 +243,34 @@ public class EntityCrayfish extends Monster implements IAnimatable {
         }
 
         public boolean canUse() {
-            long i = this.mob.level.getGameTime();
-
+            long i = this.mob.level().getGameTime();
             if (i - this.lastCanUseCheck < 20L) {
                 return false;
-            } else {
-                this.lastCanUseCheck = i;
-                LivingEntity livingentity = this.mob.getTarget();
-                if (livingentity == null) {
-                    return false;
-                } else if (!livingentity.isAlive()) {
-                    return false;
-                } else {
-                    this.path = this.mob.getNavigation().createPath(livingentity, 0);
-                    if (this.path != null) {
-                        return true;
-                    } else {
-                        return this.getAttackReachSqr(livingentity) >= this.mob.distanceToSqr(livingentity.getX(), livingentity.getY(), livingentity.getZ());
-                    }
-                }
             }
-
-
+            this.lastCanUseCheck = i;
+            LivingEntity livingentity = this.mob.getTarget();
+            if (livingentity == null || !livingentity.isAlive()) {
+                return false;
+            }
+            this.path = this.mob.getNavigation().createPath(livingentity, 0);
+            if (this.path != null) {
+                return true;
+            }
+            return this.getAttackReachSqr(livingentity) >= this.mob.distanceToSqr(livingentity.getX(), livingentity.getY(), livingentity.getZ());
         }
 
-
-
-
         public boolean canContinueToUse() {
-
             LivingEntity livingentity = this.mob.getTarget();
-
-            if (livingentity == null || livingentity instanceof EntityCrayfish) {
+            if (livingentity == null || livingentity instanceof EntityCrayfish || !livingentity.isAlive()) {
                 return false;
             }
-            else if (!livingentity.isAlive()) {
-                return false;
-            } else if (!this.followingTargetEvenIfNotSeen) {
+            if (!this.followingTargetEvenIfNotSeen) {
                 return !this.mob.getNavigation().isDone();
-            } else if (!this.mob.isWithinRestriction(livingentity.blockPosition())) {
-                return false;
-            } else {
-                return !(livingentity instanceof Player) || !livingentity.isSpectator() && !((Player) livingentity).isCreative();
             }
-
-
+            if (!this.mob.isWithinRestriction(livingentity.blockPosition())) {
+                return false;
+            }
+            return !(livingentity instanceof Player) || !livingentity.isSpectator() && !((Player) livingentity).isCreative();
         }
 
         public void start() {
@@ -361,39 +290,10 @@ public class EntityCrayfish extends Monster implements IAnimatable {
             this.mob.setAnimationState(0);
         }
 
-        /*public void tick() {
-            LivingEntity target = this.mob.getTarget();
-            double distance = this.mob.distanceToSqr(target.getX(), target.getY(), target.getZ());
-            int animState = this.mob.getAnimationState();
-            //Vec3 aim = this.mob.getLookAngle();
-            //Vec2 aim2d = new Vec2((float) (aim.x / (1 - Math.abs(aim.y))), (float) (aim.z / (1 - Math.abs(aim.y))));
-
-
-            switch (animState) {
-                case 21 -> tickRightClawAttack();
-                case 22 -> tickLeftClawAttack();
-                case 23 -> tickSlamAttack();
-                case 24 -> tickPiss();
-
-                default -> {
-                    this.ticksUntilNextPathRecalculation = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
-                    this.ticksUntilNextAttack = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
-                    this.rangedAttackCD = Math.max(this.rangedAttackCD - 1, 0);
-                    this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
-                    this.doMovement(target, distance);
-                    this.checkForCloseRangeAttack(distance, meleeRange);
-                    //break;
-                }
-
-            }
-        }*/
-
         public void tick() {
             LivingEntity target = this.mob.getTarget();
             double distance = this.mob.distanceToSqr(target.getX(), target.getY(), target.getZ());
-            //double reach = this.getAttackReachSqr(target);
             int animState = this.mob.getAnimationState();
-            //Vec3 aim = this.mob.getLookAngle();
 
             switch (animState) {
                 case 21 -> tickRightClawAttack();
@@ -404,7 +304,6 @@ public class EntityCrayfish extends Monster implements IAnimatable {
                     this.mob.yBodyRot = this.mob.yHeadRot;
                     tickPiss();
                 }
-
                 default -> {
                     this.ticksUntilNextPathRecalculation = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
                     this.ticksUntilNextAttack = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
@@ -416,13 +315,12 @@ public class EntityCrayfish extends Monster implements IAnimatable {
             }
         }
 
-        protected void doMovement (LivingEntity livingentity, Double d0){
-
-
+        protected void doMovement(LivingEntity livingentity, Double d0) {
             this.ticksUntilNextPathRecalculation = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
-
-
-            if ((this.followingTargetEvenIfNotSeen || this.mob.getSensing().hasLineOfSight(livingentity)) && this.ticksUntilNextPathRecalculation <= 0 && (this.pathedTargetX == 0.0D && this.pathedTargetY == 0.0D && this.pathedTargetZ == 0.0D || livingentity.distanceToSqr(this.pathedTargetX, this.pathedTargetY, this.pathedTargetZ) >= 1.0D || this.mob.getRandom().nextFloat() < 0.05F)) {
+            if ((this.followingTargetEvenIfNotSeen || this.mob.getSensing().hasLineOfSight(livingentity)) && this.ticksUntilNextPathRecalculation <= 0 &&
+                    (this.pathedTargetX == 0.0D && this.pathedTargetY == 0.0D && this.pathedTargetZ == 0.0D ||
+                            livingentity.distanceToSqr(this.pathedTargetX, this.pathedTargetY, this.pathedTargetZ) >= 1.0D ||
+                            this.mob.getRandom().nextFloat() < 0.05F)) {
                 this.pathedTargetX = livingentity.getX();
                 this.pathedTargetY = livingentity.getY();
                 this.pathedTargetZ = livingentity.getZ();
@@ -431,10 +329,11 @@ public class EntityCrayfish extends Monster implements IAnimatable {
                     this.ticksUntilNextPathRecalculation += failedPathFindingPenalty;
                     if (this.mob.getNavigation().getPath() != null) {
                         Node finalPathPoint = this.mob.getNavigation().getPath().getEndNode();
-                        if (finalPathPoint != null && livingentity.distanceToSqr(finalPathPoint.x, finalPathPoint.y, finalPathPoint.z) < 1)
+                        if (finalPathPoint != null && livingentity.distanceToSqr(finalPathPoint.x, finalPathPoint.y, finalPathPoint.z) < 1) {
                             failedPathFindingPenalty = 0;
-                        else
+                        } else {
                             failedPathFindingPenalty += 10;
+                        }
                     } else {
                         failedPathFindingPenalty += 10;
                     }
@@ -444,303 +343,213 @@ public class EntityCrayfish extends Monster implements IAnimatable {
                 } else if (d0 > 256.0D) {
                     this.ticksUntilNextPathRecalculation += 5;
                 }
-
                 if (!this.mob.getNavigation().moveTo(livingentity, this.speedModifier)) {
                     this.ticksUntilNextPathRecalculation += 15;
                 }
             }
-
         }
 
-
-        protected void checkForCloseRangeAttack ( double distance, double meleeRange){//TODO: LAST LEFT HERE
+        protected void checkForCloseRangeAttack(double distance, double meleeRange) {
             if (distance <= meleeRange && this.ticksUntilNextAttack <= 0) {
                 int r = (this.mob.getRandom().nextInt(100) + 1);
-
-                //rarity should be equal for stab and sweep but much less for slam
-                //23 is slam, 22 is sweep, 21 is stab
-                if (Math.abs(this.mob.getTarget().getY() - this.mob.getY()) >= 1){
+                if (Math.abs(this.mob.getTarget().getY() - this.mob.getY()) >= 1) {
                     if (r <= 70) {
-                        this.mob.setAnimationState(23);
-                        //slam
-                    } else{
-                        this.mob.setAnimationState(24);
-                        //piss
+                        this.mob.setAnimationState(23); // Slam
+                    } else {
+                        this.mob.setAnimationState(24); // Piss
                     }
-                    //if the mob is above itself, try pissing or slamming
-                }
-
-                else if (distance <= 50) {
+                } else if (distance <= 50) {
                     if (r <= 70) {
-                        this.mob.setAnimationState(21);
-                        //stab
+                        this.mob.setAnimationState(21); // Stab
                     } else if (70 < r && r <= 90) {
-                        this.mob.setAnimationState(22);
-                        //slash
-                    } else { //if r > 90
-                        this.mob.setAnimationState(23);
-                        //slam
+                        this.mob.setAnimationState(22); // Slash
+                    } else {
+                        this.mob.setAnimationState(23); // Slam
                     }
-                    //if target is closer than 50, then have a higher chance to slash than stab
-                    //70% chance for slash, 20% chance to stab, 10% chance to slam
-
                 } else if (distance <= 100) {
                     if (50 < r && r <= 80) {
-                        this.mob.setAnimationState(21);
-                        //stab
+                        this.mob.setAnimationState(21); // Stab
                     } else if (r <= 50) {
-                        this.mob.setAnimationState(22);
-                        //slash
+                        this.mob.setAnimationState(22); // Slash
                     } else {
-                        this.mob.setAnimationState(23);
-                        //slam
+                        this.mob.setAnimationState(23); // Slam
                     }
-                    //if target is closer than 50, then have a higher chance to slash than stab
-                    //50% chance for stab, 30% chance to slash, 20% chance to slam
-
                 }
-                //originally 400, 1000, 1400 for r
-
             } else if (this.ticksUntilNextAttack <= 0 && this.rangedAttackCD <= 0) {
-                this.mob.setAnimationState(24);
-                //piss if target too far
+                this.mob.setAnimationState(24); // Piss if target too far
             }
         }
 
-
-        protected boolean getRangeCheck () {
-
-            return
-                    this.mob.distanceToSqr(this.mob.getTarget().getX(), this.mob.getTarget().getY(), this.mob.getTarget().getZ())
-                            <=
-                            1.8F * this.getAttackReachSqr(this.mob.getTarget());
+        protected boolean getRangeCheck() {
+            return this.mob.distanceToSqr(this.mob.getTarget().getX(), this.mob.getTarget().getY(), this.mob.getTarget().getZ())
+                    <= 1.8F * this.getAttackReachSqr(this.mob.getTarget());
         }
 
-
-
-        protected void tickLeftClawAttack () {
+        protected void tickLeftClawAttack() {
             this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
             this.mob.yBodyRot = this.mob.yHeadRot;
             this.mob.getNavigation().stop();
             animTime++;
-
-            if(animTime==16) {
+            if (animTime == 16) {
                 performLeftClawAttack();
             }
-
-            if(animTime>=24) {
-                animTime=0;
-
+            if (animTime >= 24) {
+                animTime = 0;
                 this.mob.setAnimationState(0);
                 this.resetAttackCooldown(15);
                 this.ticksUntilNextPathRecalculation = 0;
-
             }
-
         }
 
-        protected void tickRightClawAttack () {
+        protected void tickRightClawAttack() {
             if (animTime <= 3) {
                 this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
                 this.mob.yBodyRot = this.mob.yHeadRot;
             }
-
             this.mob.getNavigation().stop();
             animTime++;
-
-            /*if(animTime==10) {
-                performRightClawAttack();
-            }*/
-
-            if(animTime==6) {
+            if (animTime == 6) {
                 performRightClawAttack();
             }
-
-            if(animTime>=12) {
-                animTime=0;
+            if (animTime >= 12) {
+                animTime = 0;
                 this.mob.setAnimationState(0);
                 this.resetAttackCooldown(5);
                 this.ticksUntilNextPathRecalculation = 0;
             }
-
         }
-        protected void tickSlamAttack () {
+
+        protected void tickSlamAttack() {
             animTime++;
             this.mob.getNavigation().stop();
-
             if (animTime <= 3) {
                 this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
                 this.mob.yBodyRot = this.mob.yHeadRot;
             }
-
-            if(animTime==19) {
+            if (animTime == 19) {
                 performSlamAttack();
             }
-
-            if(animTime>=24) {
-                animTime=0;
+            if (animTime >= 24) {
+                animTime = 0;
                 this.mob.setAnimationState(0);
                 this.resetAttackCooldown(20);
                 this.ticksUntilNextPathRecalculation = 0;
             }
         }
 
-        protected void tickPiss (){;
+        protected void tickPiss() {
             this.mob.getNavigation().stop();
             LivingEntity target = this.mob.getTarget();
             this.mob.lookAt(target, 100000, 100000);
             this.mob.yBodyRot = this.mob.yHeadRot;
-            animTime ++;
-
-            if (animTime==10) {
+            animTime++;
+            if (animTime == 10) {
                 piss(target);
-
             } else {
                 this.targetOldX = target.getX();
                 this.targetOldY = target.getY();
                 this.targetOldZ = target.getZ();
-                //only update the old coords after confirming they won't be used
             }
-
-            if(animTime>=18) {
-                animTime=0;
+            if (animTime >= 18) {
+                animTime = 0;
                 this.mob.setAnimationState(0);
                 this.resetAttackCooldown(mob.random.nextInt(1, 21));
                 this.ticksUntilNextPathRecalculation = 0;
-                this.rangedAttackCD = this.mob.getRandom().nextInt(200);;
+                this.rangedAttackCD = this.mob.getRandom().nextInt(200);
             }
         }
-
-        //TODO: replace piss particles
 
         protected void piss(LivingEntity target) {
             this.mob.setDeltaMovement(this.mob.getDeltaMovement().scale(0));
             this.mob.getLookControl().setLookAt(target.position());
             this.mob.yBodyRot = this.mob.yHeadRot;
             double pissspeed = 7;
-            //MAKE SURE THIS IS THE SAME NUMBER AS EntityToxicWater's pissspeed
             double pissspeedforcalculation = pissspeed - 1;
-            //slight delay to tune it
-            Vec3 targetVelocity = new Vec3((target.getX() - targetOldX),(target.getY() - targetOldY),(target.getZ() - targetOldZ));
-
+            Vec3 targetVelocity = new Vec3((target.getX() - targetOldX), (target.getY() - targetOldY), (target.getZ() - targetOldZ));
             Vec3 tStartPos = target.position();
             Vec3 tTempPos = tStartPos;
 
             for (int count = 0; count < 1; count++) {
-                double flatDist = Math.sqrt((this.mob.getX() - target.getX())*(this.mob.getX() - target.getX()) + (this.mob.getZ() - target.getZ())*(this.mob.getZ() - target.getZ()));
-                double tallDist = Math.sqrt(flatDist*flatDist + (this.mob.getY() + 2 - target.getY())*(this.mob.getY() + 2 - target.getY()));
-                //use urine.getwhatevercoordinate if this.mob.getwhatevercoordinate makes it worse
-                double pissReachTime = tallDist/pissspeedforcalculation;
-                tTempPos = tTempPos.add(targetVelocity.multiply(pissReachTime - (0.1*target.distanceTo(this.mob)), 0, pissReachTime - (0.1*target.distanceTo(this.mob))));
-
+                double flatDist = Math.sqrt((this.mob.getX() - target.getX()) * (this.mob.getX() - target.getX()) + (this.mob.getZ() - target.getZ()) * (this.mob.getZ() - target.getZ()));
+                double tallDist = Math.sqrt(flatDist * flatDist + (this.mob.getY() + 2 - target.getY()) * (this.mob.getY() + 2 - target.getY()));
+                double pissReachTime = tallDist / pissspeedforcalculation;
+                tTempPos = tTempPos.add(targetVelocity.multiply(pissReachTime - (0.1 * target.distanceTo(this.mob)), 0, pissReachTime - (0.1 * target.distanceTo(this.mob))));
                 if (tTempPos.distanceTo(target.position()) <= 1) {
                     break;
                 }
             }
 
-            Vec3 finalTargetPos = tTempPos.add(0,target.getEyeHeight()*0.5,0);
+            Vec3 finalTargetPos = tTempPos.add(0, target.getEyeHeight() * 0.5, 0);
 
-            if (this.mob.getVariant() <= 14 && 10 <= this.mob.getVariant()){
-                EntityBloodWater urine = new EntityBloodWater(NSSEntities.BLOODWATER.get(), this.mob.level);
+            if (this.mob.getVariant() <= 14 && 10 <= this.mob.getVariant()) {
+                EntityBloodWater urine = new EntityBloodWater(NSSEntities.BLOODWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
                 urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
-                this.mob.level.addFreshEntity(urine);
-
-            } else if (this.mob.getVariant() <= 9 && 5 <= this.mob.getVariant()){
-                EntityIceWater urine = new EntityIceWater(NSSEntities.ICEWATER.get(), this.mob.level);
+                this.mob.level().addFreshEntity(urine);
+            } else if (this.mob.getVariant() <= 9 && 5 <= this.mob.getVariant()) {
+                EntityIceWater urine = new EntityIceWater(NSSEntities.ICEWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
                 urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
-                this.mob.level.addFreshEntity(urine);
-
+                this.mob.level().addFreshEntity(urine);
             } else {
-                EntityToxicWater urine = new EntityToxicWater(NSSEntities.TOXICWATER.get(), this.mob.level);
+                EntityToxicWater urine = new EntityToxicWater(NSSEntities.TOXICWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
                 urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
-                this.mob.level.addFreshEntity(urine);
+                this.mob.level().addFreshEntity(urine);
             }
 
-            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.pissOffSet, 2f, 1.5f, 2f, (ServerLevel)this.mob.getLevel(), 10f, DamageSource.mobAttack(mob), 2f, true);
-
-            this.mob.lookAt(target, 100000, 100000);
-            this.mob.yBodyRot = this.mob.yHeadRot;
-            //LightningBolt marker = EntityType.LIGHTNING_BOLT.create(this.mob.level);
-            //marker.moveTo(finalTargetPos);
-            //System.out.println("intent" + pos);
-            //System.out.println("target" + target.position());
-            //this.mob.level.addFreshEntity(marker);
+            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.pissOffSet, 2f, 1.5f, 2f, (ServerLevel) this.mob.level(), 10f,
+                    new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 2f, true);
         }
 
         protected void performSlamAttack() {
-            //Vec3 pos = mob.position();
             this.mob.setDeltaMovement(this.mob.getDeltaMovement().scale(0));
             this.mob.playSound(NSSSounds.CRAYFISH_ATTACK.get(), 0.5F, 0.5F);
-            //this.mob.willItBreak = true;
-            //HitboxHelper.LargeAttack(DamageSource.mobAttack(mob),5.0f, 1.5f, mob, pos,  80.0F, -Math.PI/6, Math.PI/6, -1.0f, 3.0f);
-            ServerLevel serverLevel = ((ServerLevel) this.mob.getLevel());
-            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.slamOffSet, 3f, 3f, 3f, (ServerLevel)this.mob.getLevel(), 15f, DamageSource.mobAttack(mob), 2f, true);
-
-            //TODO: Send a packet for slam particles
-            //THIS METHOD IS ONLY RAN ON THE SERVERSIDE.
+            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.slamOffSet, 3f, 3f, 3f, (ServerLevel) this.mob.level(), 15f,
+                    new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 2f, true);
         }
 
-
-
-        protected void performLeftClawAttack () {
-            //Vec3 pos = mob.position();
+        protected void performLeftClawAttack() {
             this.mob.setDeltaMovement(this.mob.getDeltaMovement().scale(0));
             this.mob.playSound(NSSSounds.CRAYFISH_ATTACK.get(), 0.5F, 0.5F);
-            //this.mob.willItBreak = false;
-            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.slashOffSet, 5.5f, 1f, 5.5f, (ServerLevel)this.mob.getLevel(), 10f, DamageSource.mobAttack(mob), 3f, false);
-            //HitboxHelper.LargeAttack(DamageSource.mobAttack(mob),5.0f, 1.0f, mob, pos,  6.0F, -Math.PI/2, Math.PI/2, -1.0f, 3.0f);
-
-            //TODO: Send a packet for slam particles
-            //THIS METHOD IS ONLY RAN ON THE SERVERSIDE.
+            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.slashOffSet, 5.5f, 1f, 5.5f, (ServerLevel) this.mob.level(), 10f,
+                    new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 3f, false);
         }
 
-        protected void performRightClawAttack () {
-            //Vec3 pos = mob.position();
+        protected void performRightClawAttack() {
             this.mob.setDeltaMovement(this.mob.getDeltaMovement().scale(0));
             this.mob.playSound(NSSSounds.CRAYFISH_ATTACK.get(), 0.5F, 0.5F);
-            //this.mob.willItBreak = false;
-            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.pokeOffSet, 0.5f, 2f, 0.5f, (ServerLevel)this.mob.getLevel(), 10f, DamageSource.mobAttack(mob), 0.3f, false);
-            //HitboxHelper.LargeAttack(DamageSource.mobAttack(mob),5.0f, 1.0f, mob, pos,  6.0F, -Math.PI/2, Math.PI/2, -1.0f, 3.0f);
-
-            //TODO: Send a packet for slam particles
-            //THIS METHOD IS ONLY RAN ON THE SERVERSIDE.
+            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.pokeOffSet, 0.5f, 2f, 0.5f, (ServerLevel) this.mob.level(), 10f,
+                    new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 0.3f, false);
         }
 
-
-        protected void resetAttackCooldown ( int CD ) {
+        protected void resetAttackCooldown(int CD) {
             this.ticksUntilNextAttack = CD;
         }
-        //sets how many ticks until the next attack
 
-        protected boolean isTimeToAttack () {
+        protected boolean isTimeToAttack() {
             return this.ticksUntilNextAttack <= 0;
         }
 
-        protected int getTicksUntilNextAttack () {
+        protected int getTicksUntilNextAttack() {
             return this.ticksUntilNextAttack;
         }
 
-        protected int getAttackInterval () {
+        protected int getAttackInterval() {
             return 5;
         }
 
         protected double getAttackReachSqr(LivingEntity entity) {
-            return (double)(this.mob.getBbWidth() * 2.5F * this.mob.getBbWidth() * 1.8F + entity.getBbWidth());
+            return (double) (this.mob.getBbWidth() * 2.5F * this.mob.getBbWidth() * 1.8F + entity.getBbWidth());
         }
     }
 
-    /*public boolean canBeCollidedWith() {
-        return true;
-    }*/
     @Override
     public boolean isPushedByFluid() {
         return false;
@@ -748,10 +557,9 @@ public class EntityCrayfish extends Monster implements IAnimatable {
 
     protected float getDamageAfterArmorAbsorb(DamageSource pDamageSource, float pDamageAmount) {
         pDamageAmount = super.getDamageAfterArmorAbsorb(pDamageSource, pDamageAmount);
-        if (pDamageSource == DamageSource.HOT_FLOOR || pDamageSource == DamageSource.LAVA || pDamageSource == DamageSource.IN_FIRE || pDamageSource == DamageSource.ON_FIRE || pDamageSource.isFire()) {
-            pDamageAmount = (float) (0.25*pDamageAmount);
+        if (pDamageSource.is(DamageTypes.HOT_FLOOR) || pDamageSource.is(DamageTypes.LAVA) || pDamageSource.is(DamageTypes.IN_FIRE) || pDamageSource.is(DamageTypes.ON_FIRE)) {
+            pDamageAmount = (float) (0.25 * pDamageAmount);
         }
-
         return pDamageAmount;
     }
 
@@ -763,15 +571,16 @@ public class EntityCrayfish extends Monster implements IAnimatable {
                 blowthrough = true;
             }
         }
-        return source == DamageSource.FALL ||
-                source == DamageSource.IN_WALL ||
-                source == DamageSource.CACTUS ||
-                source == DamageSource.STALAGMITE ||
-                (source.isProjectile() && !blowthrough) ||
-                (source == DamageSource.IN_FIRE && this.getVariant() == 2) ||
-                (source == DamageSource.LAVA && this.getVariant() == 2) ||
-                (source == DamageSource.HOT_FLOOR && this.getVariant() == 2) ||
-                (source.isFire() && this.getVariant() == 2) ||
+        return source.is(DamageTypes.FALL) ||
+                source.is(DamageTypes.IN_WALL) ||
+                source.is(DamageTypes.CACTUS) ||
+                source.is(DamageTypes.STALAGMITE) ||
+                source.is(DamageTypes.FALLING_ANVIL) ||
+                (source.is(DamageTypes.ARROW) && !blowthrough) ||
+                (source.is(DamageTypes.IN_FIRE) && this.getVariant() == 2) ||
+                (source.is(DamageTypes.LAVA) && this.getVariant() == 2) ||
+                (source.is(DamageTypes.HOT_FLOOR) && this.getVariant() == 2) ||
+                (source.is(DamageTypes.ON_FIRE) && this.getVariant() == 2) ||
                 super.isInvulnerableTo(source);
     }
 
@@ -797,60 +606,47 @@ public class EntityCrayfish extends Monster implements IAnimatable {
         this.playSound(NSSSounds.CRAYFISH_SCUTTLE.get(), 0.3F, 1.0F);
     }
 
-    private <E extends IAnimatable> PlayState predicate(AnimationEvent<E> event) {
+    private PlayState predicate(AnimationState<EntityCrayfish> state) {
         int animState = this.getAnimationState();
-
-
-        {
-            switch (animState) {
-
-                case 21:
-                    event.getController().setAnimationSpeed(0.9F);
-                    event.getController().setAnimation(new AnimationBuilder().playOnce("animation.crayfish.rightclaw"));
-                    break;
-
-                case 22:
-                    event.getController().setAnimationSpeed(0.8F);
-                    event.getController().setAnimation(new AnimationBuilder().playOnce("animation.crayfish.leftclaw"));
-                    break;
-
-                case 23:
-                    event.getController().setAnimationSpeed(0.8F);
-                    event.getController().setAnimation(new AnimationBuilder().playOnce("animation.crayfish.slam"));
-                    break;
-
-                case 24:
-                    event.getController().setAnimationSpeed(0.8F);
-                    event.getController().setAnimation(new AnimationBuilder().playOnce("animation.crayfish.snipe"));
-                    break;
-
-                default:
-                    if (!(event.getLimbSwingAmount() > -0.06F && event.getLimbSwingAmount() < 0.06F)) {
-                        event.getController().setAnimationSpeed(1 + (this.directionlessSpeed/0.24));
-                        event.getController().setAnimation(new AnimationBuilder().loop("animation.crayfish.walk"));
-                        //default speed is 0.24
-
-                    } else {
-                        event.getController().setAnimationSpeed(1.0);
-                        event.getController().setAnimation(new AnimationBuilder().loop("animation.crayfish.idle"));
-                    }
-                    break;
-
-            }
+        AnimationController<?> controller = state.getController();
+        switch (animState) {
+            case 21:
+                controller.setAnimation(RIGHT_CLAW_ANIM);
+                controller.setAnimationSpeed(0.9F);
+                return PlayState.CONTINUE;
+            case 22:
+                controller.setAnimation(LEFT_CLAW_ANIM);
+                controller.setAnimationSpeed(0.8F);
+                return PlayState.CONTINUE;
+            case 23:
+                controller.setAnimation(SLAM_ANIM);
+                controller.setAnimationSpeed(0.8F);
+                return PlayState.CONTINUE;
+            case 24:
+                controller.setAnimation(SNIPE_ANIM);
+                controller.setAnimationSpeed(0.8F);
+                return PlayState.CONTINUE;
+            default:
+                double speed = Math.sqrt(this.getDeltaMovement().x * this.getDeltaMovement().x + this.getDeltaMovement().z * this.getDeltaMovement().z);
+                if (speed > 0.06) {
+                    controller.setAnimationSpeed(1 + (this.directionlessSpeed / 0.24));
+                    controller.setAnimation(WALK_ANIM);
+                } else {
+                    controller.setAnimationSpeed(1.0);
+                    controller.setAnimation(IDLE_ANIM);
+                }
+                return PlayState.CONTINUE;
         }
-        return PlayState.CONTINUE;
     }
 
     @Override
-    public void registerControllers(AnimationData data) {
-        data.setResetSpeedInTicks(1);
-        AnimationController<EntityCrayfish> controller = new AnimationController<>(this, "controller", 3, this::predicate);
-        data.addAnimationController(controller);
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "controller", 3, this::predicate));
     }
 
     @Override
-    public AnimationFactory getFactory() {
-        return this.factory;
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return this.cache;
     }
 
     public int getVariant() {
@@ -874,64 +670,36 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     public SpawnGroupData finalizeSpawn(ServerLevelAccessor worldIn, DifficultyInstance difficultyIn, MobSpawnType reason, @Nullable SpawnGroupData spawnDataIn, @Nullable CompoundTag dataTag) {
         spawnDataIn = super.finalizeSpawn(worldIn, difficultyIn, reason, spawnDataIn, dataTag);
         int rarityRoll = (this.getRandom().nextInt(100) + 1);
-        //since it uses nextIntBetweenInclusive you just take the max and min texture values and put it in without changing anything
-        //i.e. the blood selection in CrayfishModel ranges from 4 - 5, so you put that in
-
         int i;
-        if(canSpawnBlood(worldIn, this.blockPosition())){
+        if (canSpawnBlood(worldIn, this.blockPosition())) {
             if (rarityRoll >= 100) {
                 i = 14;
-                //System.out.println("rareblood");
-                //1% chance to get a rare crayfish
             } else if (rarityRoll > 90) {
                 i = 13;
-                //System.out.println("uncblood");
-                //9% chance to get an uncommon crayfish
             } else {
                 i = this.random.nextIntBetweenInclusive(10, 12);
-                //System.out.println("stndblood");
-                //90% chance to get a standard crayfish
             }
             this.biomeVariant = 2;
-            //2 for blood
-
-        } else if(canSpawnIce(worldIn, this.blockPosition())){
+        } else if (canSpawnIce(worldIn, this.blockPosition())) {
             if (rarityRoll >= 100) {
                 i = 9;
-                //System.out.println("rareice");
-                //1% chance to get a rare crayfish
             } else if (rarityRoll > 90) {
                 i = 8;
-                //System.out.println("uncice");
-                //9% chance to get an uncommon crayfish
             } else {
                 i = this.random.nextIntBetweenInclusive(5, 7);
-                //System.out.println("stndice");
-                //90% chance to get a standard crayfish
             }
             this.biomeVariant = 1;
-            //1 for ice;
-
         } else {
             if (rarityRoll >= 100) {
                 i = 4;
-                //System.out.println("rareswamp");
-                //1% chance to get a rare crayfish
             } else if (rarityRoll > 90) {
                 i = 3;
-                //System.out.println("uncswamp");
-                //9% chance to get an uncommon crayfish
             } else {
                 i = this.random.nextIntBetweenInclusive(0, 2);
-                //System.out.println("stndswamp");
-                //90% chance to get a standard crayfish
             }
             this.biomeVariant = 0;
-            //0 for swamp
         }
-
         this.setVariant(i);
-        //System.out.println(i);
         return super.finalizeSpawn(worldIn, difficultyIn, reason, spawnDataIn, dataTag);
     }
 
@@ -944,17 +712,15 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     }
 
     public void checkDespawn() {
-        if (this.level.getDifficulty() == Difficulty.PEACEFUL && this.shouldDespawnInPeaceful()) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL && this.shouldDespawnInPeaceful()) {
             this.discard();
         } else {
             this.noActionTime = 0;
         }
     }
 
-
     protected PathNavigation createNavigation(Level p_33348_) {
         return new RexNavigation(this, p_33348_);
-        //used to use LargeEntityGroundNavigator
     }
 
     static class RexNavigation extends GroundPathNavigation {
@@ -969,9 +735,9 @@ public class EntityCrayfish extends Monster implements IAnimatable {
     }
 
     static class RexNodeEvaluator extends WalkNodeEvaluator {
-        protected BlockPathTypes evaluateBlockPathType(BlockGetter p_33387_, boolean p_33388_, boolean p_33389_, BlockPos p_33390_, BlockPathTypes p_33391_) {
-            return p_33391_ == BlockPathTypes.LEAVES ? BlockPathTypes.OPEN : super.evaluateBlockPathType(p_33387_, p_33388_, p_33389_, p_33390_, p_33391_);
+        @Override
+        protected BlockPathTypes evaluateBlockPathType(BlockGetter level, BlockPos pos, BlockPathTypes type) {
+            return type == BlockPathTypes.LEAVES ? BlockPathTypes.OPEN : super.evaluateBlockPathType(level, pos, type);
         }
     }
-
 }

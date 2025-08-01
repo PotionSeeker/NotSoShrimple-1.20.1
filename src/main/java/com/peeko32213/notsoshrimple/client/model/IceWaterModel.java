@@ -4,9 +4,10 @@ import com.peeko32213.notsoshrimple.NotSoShrimple;
 import com.peeko32213.notsoshrimple.common.entity.ArchivedProjectileWater;
 import com.peeko32213.notsoshrimple.common.entity.EntityIceWater;
 import net.minecraft.resources.ResourceLocation;
-import software.bernie.geckolib3.model.AnimatedGeoModel;
+//import software.bernie.geckolib3.model.AnimatedGeoModel;
+import software.bernie.geckolib.model.GeoModel;
 
-public class IceWaterModel extends AnimatedGeoModel<EntityIceWater> {
+public class IceWaterModel extends GeoModel<EntityIceWater> {
 
     @Override
     public ResourceLocation getTextureResource(EntityIceWater object) {

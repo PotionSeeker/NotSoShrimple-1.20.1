@@ -6,11 +6,12 @@ import com.peeko32213.notsoshrimple.NotSoShrimple;
 import com.peeko32213.notsoshrimple.common.entity.EntityCrayfish;
 import net.minecraft.Util;
 import net.minecraft.resources.ResourceLocation;
-import software.bernie.geckolib3.model.AnimatedGeoModel;
+//import software.bernie.geckolib3.model.AnimatedGeoModel;
+import software.bernie.geckolib.model.GeoModel;
 
 import java.util.Map;
 
-public class CrayfishModel extends AnimatedGeoModel<EntityCrayfish> {
+public class CrayfishModel extends GeoModel<EntityCrayfish> {
     public static final Map<Integer, ResourceLocation> TEXTURES = Util.make(Maps.newHashMap(), (hashMap) -> {
         hashMap.put(0, new ResourceLocation(NotSoShrimple.MODID, "textures/entity/crayfish_brown.png"));
         hashMap.put(1, new ResourceLocation(NotSoShrimple.MODID, "textures/entity/crayfish_shit.png"));

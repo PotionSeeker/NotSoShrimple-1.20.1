@@ -3,7 +3,7 @@ package com.peeko32213.notsoshrimple.common.item;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import net.minecraft.advancements.CriteriaTriggers;
-import net.minecraft.client.Game;
+//import net.minecraft.client.Game;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.server.level.ServerPlayer;

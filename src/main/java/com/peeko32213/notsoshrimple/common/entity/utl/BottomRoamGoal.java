@@ -5,7 +5,6 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
-import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.Vec3;
@@ -30,7 +29,8 @@ public class BottomRoamGoal extends RandomStrollGoal {
         this.range = range;
     }
 
-    public boolean canUse(){
+    @Override
+    public boolean canUse() {
         if (mob instanceof SemiAquatic && ((SemiAquatic) mob).shouldStopMoving()) {
             return false;
         }
@@ -38,36 +38,36 @@ public class BottomRoamGoal extends RandomStrollGoal {
         return super.canUse();
     }
 
+    @Override
     public boolean canContinueToUse() {
-        if (mob instanceof SemiAquatic && ((SemiAquatic) mob).shouldStopMoving())
+        if (mob instanceof SemiAquatic && ((SemiAquatic) mob).shouldStopMoving()) {
             return false;
-
+        }
         return super.canContinueToUse();
     }
 
     @Nullable
+    @Override
     protected Vec3 getPosition() {
-        if(this.mob.isInWater()) {
+        if (this.mob.isInWater()) {
             BlockPos blockpos = null;
             final RandomSource random = this.mob.getRandom();
             for (int i = 0; i < 15; i++) {
                 BlockPos blockPos = this.mob.blockPosition().offset(random.nextInt(range) - range / 2, 3, random.nextInt(range) - range / 2);
-                while ((this.mob.level.isEmptyBlock(blockPos) || this.mob.level.getFluidState(blockPos).is(FluidTags.WATER)) && blockPos.getY() > 1) {
+                while ((this.mob.level().isEmptyBlock(blockPos) || this.mob.level().getFluidState(blockPos).is(FluidTags.WATER)) && blockPos.getY() > 1) {
                     blockPos = blockPos.below();
                 }
-                if (isBottomOfSeafloor(this.mob.level, blockPos.above())) {
+                if (isBottomOfSeafloor(this.mob.level(), blockPos.above())) {
                     blockpos = blockPos;
                 }
             }
-
             return blockpos != null ? new Vec3(blockpos.getX() + 0.5F, blockpos.getY() + 0.5F, blockpos.getZ() + 0.5F) : null;
-        }else{
+        } else {
             return super.getPosition();
-
         }
     }
 
-    private boolean isBottomOfSeafloor(LevelAccessor world, BlockPos pos){
+    private boolean isBottomOfSeafloor(LevelAccessor world, BlockPos pos) {
         return world.getFluidState(pos).is(FluidTags.WATER) && world.getFluidState(pos.below()).isEmpty() && world.getBlockState(pos.below()).canOcclude();
     }
 }

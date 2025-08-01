@@ -4,9 +4,10 @@ import com.peeko32213.notsoshrimple.NotSoShrimple;
 import com.peeko32213.notsoshrimple.common.entity.EntityBloodWater;
 import com.peeko32213.notsoshrimple.common.entity.EntityToxicWater;
 import net.minecraft.resources.ResourceLocation;
-import software.bernie.geckolib3.model.AnimatedGeoModel;
+//import software.bernie.geckolib3.model.AnimatedGeoModel;
+import software.bernie.geckolib.model.GeoModel;
 
-public class BloodWaterModel extends AnimatedGeoModel<EntityBloodWater> {
+public class BloodWaterModel extends GeoModel<EntityBloodWater> {
 
     @Override
     public ResourceLocation getModelResource(EntityBloodWater object) {
