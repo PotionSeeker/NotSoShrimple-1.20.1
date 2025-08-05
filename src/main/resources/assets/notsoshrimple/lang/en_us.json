@@ -16,12 +16,14 @@
   "item.notsoshrimple.purging_stone": "Purging Stone",
 
   "notsoshrimple.sound.subtitle.crayfish_idle": "Dreadful chattering",
-  "notsoshrimple.sound.subtitle.crayfish_attack": "Heavy claw swipe",
-  "notsoshrimple.sound.subtitle.crayfish_hurt": "Pling",
+  "notsoshrimple.sound.subtitle.crayfish_attack": "Claw swipe",
+  "notsoshrimple.sound.subtitle.crayfish_hurt": "Crayfish hurt",
   "notsoshrimple.sound.subtitle.crayfish_death": "Clattering shriek",
   "notsoshrimple.sound.subtitle.crayfish_scuttle": "Menacing scuttling",
   "notsoshrimple.sound.subtitle.crayfish_scuttling_0": "Horrid scuttling",
   "notsoshrimple.sound.subtitle.crayfish_scuttling_1": "Oppressive scuttling",
+  "notsoshrimple.sound.subtitle.crayfish_smashing": "Claw smash",
+  "notsoshrimple.sound.subtitle.crayfish_water_blast": "Water blast",
 
   "durability": "Durability"
 

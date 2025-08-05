@@ -5991,6 +5991,193 @@
 				}
 			}
 		},
+		"animation.crayfish.air": {
+			"loop": true,
+			"animation_length": 2,
+			"bones": {
+				"cephalothorax": {
+					"rotation": {
+						"vector": ["35+Math.cos((query.anim_time)*360)*-5", 0, 0]
+					}
+				},
+				"tail": {
+					"rotation": {
+						"vector": ["-70+Math.cos((query.anim_time-0.2)*360)*5", 0, 0]
+					}
+				},
+				"tailfin": {
+					"rotation": {
+						"vector": ["-40+Math.cos((query.anim_time-0.4)*360)*10", 0, 0]
+					}
+				},
+				"finleft": {
+					"rotation": {
+						"vector": [0, 0, 0]
+					}
+				},
+				"antennaecore": {
+					"rotation": {
+						"vector": ["67.5+Math.cos((query.anim_time-0.2)*360)*-5", 0, 0]
+					}
+				},
+				"leftantennae": {
+					"rotation": {
+						"vector": [0, 0, 70]
+					}
+				},
+				"rightantennae": {
+					"rotation": {
+						"vector": [0, 0, -70]
+					}
+				},
+				"antennaecore2": {
+					"rotation": {
+						"vector": ["82.5+Math.cos((query.anim_time-0.3)*360)*-5", 0, 0]
+					}
+				},
+				"leftantennae2": {
+					"rotation": {
+						"vector": [0, 0, 35]
+					}
+				},
+				"rightantennae2": {
+					"rotation": {
+						"vector": [0, 0, -35]
+					}
+				},
+				"clawscore": {
+					"rotation": {
+						"vector": [-5, 0, 0]
+					}
+				},
+				"leftclaw": {
+					"rotation": {
+						"vector": ["4.0825+Math.cos((query.anim_time-0.2)*360)*-10", "9.042+Math.cos((query.anim_time-0.2)*360)*-3", -28.92534]
+					}
+				},
+				"leftclaw2": {
+					"rotation": {
+						"vector": [11.07995, 7.49748, -0.46313]
+					},
+					"position": {
+						"vector": [0, 0, 0]
+					}
+				},
+				"leftclaw4": {
+					"rotation": {
+						"vector": [0, "20+Math.cos((query.anim_time-0.2)*360)*-6", 0]
+					}
+				},
+				"rightclaw4": {
+					"rotation": {
+						"vector": ["16.2242+Math.cos((query.anim_time-0.1)*360)*-8", "2.6731+Math.cos((query.anim_time-0.3)*360)*1", 31.40784]
+					}
+				},
+				"rightclaw5": {
+					"rotation": {
+						"vector": [0, -17.5, 0]
+					},
+					"position": {
+						"vector": [-3, 0, -2]
+					}
+				},
+				"rightclaw6": {
+					"rotation": {
+						"vector": [0, "-7.5+Math.cos((query.anim_time-0.2)*360)*5", 0]
+					}
+				},
+				"lefteye": {
+					"rotation": {
+						"vector": [0, 40, 0]
+					}
+				},
+				"righteye": {
+					"rotation": {
+						"vector": [0, -40, 0]
+					}
+				},
+				"rightlegpivot4": {
+					"rotation": {
+						"vector": [0, 0, "75+Math.cos((query.anim_time)*360)*10"]
+					}
+				},
+				"rightlegsegmentB4": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*-15"]
+					}
+				},
+				"rightlegpivot": {
+					"rotation": {
+						"vector": [0, 0, "75+Math.cos((query.anim_time)*360)*-10"]
+					}
+				},
+				"rightlegsegmentB": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*-15"]
+					}
+				},
+				"rightlegpivot2": {
+					"rotation": {
+						"vector": [0, 0, "75+Math.cos((query.anim_time)*360)*10"]
+					}
+				},
+				"rightlegsegmentB2": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*15"]
+					}
+				},
+				"rightlegpivot3": {
+					"rotation": {
+						"vector": [0, 0, "75+Math.cos((query.anim_time)*360)*-10"]
+					}
+				},
+				"rightlegsegmentB3": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*15"]
+					}
+				},
+				"leftlegpivot4": {
+					"rotation": {
+						"vector": [0, 0, "-75+Math.cos((query.anim_time)*360)*-10"]
+					}
+				},
+				"leftlegsegmentB4": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*15"]
+					}
+				},
+				"leftlegpivot": {
+					"rotation": {
+						"vector": [0, 0, "-75+Math.cos((query.anim_time)*360)*10"]
+					}
+				},
+				"leftlegsegmentB": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*15"]
+					}
+				},
+				"leftlegpivot2": {
+					"rotation": {
+						"vector": [0, 0, "-75+Math.cos((query.anim_time)*360)*-10"]
+					}
+				},
+				"leftlegsegmentB2": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*-15"]
+					}
+				},
+				"leftlegpivot3": {
+					"rotation": {
+						"vector": [0, 0, "-75+Math.cos((query.anim_time)*360)*10"]
+					}
+				},
+				"leftlegsegmentB3": {
+					"rotation": {
+						"vector": [0, 0, "Math.cos((query.anim_time-0.2)*360)*-15"]
+					}
+				}
+			}
+		},
 		"animation.crayfish.shouldthisbeusedinsteadofsnipe": {
 			"animation_length": 1.33333,
 			"bones": {

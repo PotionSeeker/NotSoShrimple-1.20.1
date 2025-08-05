@@ -64,5 +64,32 @@
       }
     ],
     "subtitle": "notsoshrimple.sound.subtitle.scuttling_scuttle"
+  },
+  "crayfish_smash": {
+    "category": "neutral",
+    "sounds": [
+      {
+        "name": "notsoshrimple:crayfish_smash_0"
+      },
+      {
+        "name": "notsoshrimple:crayfish_smash_1"
+      },
+      {
+        "name": "notsoshrimple:crayfish_smash_2"
+      }
+    ],
+    "subtitle": "notsoshrimple.sound.subtitle.crayfish_smashing"
+  },
+  "crayfish_blast": {
+    "category": "neutral",
+    "sounds": [
+      {
+        "name": "notsoshrimple:crayfish_blast_0"
+      },
+      {
+        "name": "notsoshrimple:crayfish_blast_1"
+      }
+    ],
+    "subtitle": "notsoshrimple.sound.subtitle.crayfish_water_blast"
   }
 }
