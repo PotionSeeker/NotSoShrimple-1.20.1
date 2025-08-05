@@ -5,6 +5,8 @@ import com.peeko32213.notsoshrimple.core.config.NotSoShrimpleConfig;
 import com.peeko32213.notsoshrimple.core.registry.NSSEntities;
 import com.peeko32213.notsoshrimple.core.registry.NSSSounds;
 import com.peeko32213.notsoshrimple.core.registry.NSSTags;
+import com.peeko32213.notsoshrimple.common.entity.utl.FallingBlockEntity;
+import com.peeko32213.notsoshrimple.common.entity.utl.ScreenShakeEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleTypes;
@@ -21,7 +23,6 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -44,11 +45,12 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.pathfinder.*;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.animatable.SingletonGeoAnimatable;
@@ -60,13 +62,14 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
 import java.util.EnumSet;
+import java.util.List;
 
 public class EntityCrayfish extends Monster implements GeoEntity {
-    // Animation constants for Geckolib v4
     private static final RawAnimation RIGHT_CLAW_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.rightclaw");
     private static final RawAnimation LEFT_CLAW_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.leftclaw");
     private static final RawAnimation SLAM_ANIM = RawAnimation.begin().thenPlay("animation.crayfish.slam");
     private static final RawAnimation SNIPE_ANIM = RawAnimation.begin().thenPlayAndHold("animation.crayfish.snipe");
+    private static final RawAnimation AIR_ANIM = RawAnimation.begin().thenPlay("animation.crayfish.air");
     private static final RawAnimation WALK_ANIM = RawAnimation.begin().thenLoop("animation.crayfish.walk");
     private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("animation.crayfish.idle");
     private static final EntityDataAccessor<Integer> ANIMATION_STATE = SynchedEntityData.defineId(EntityCrayfish.class, EntityDataSerializers.INT);
@@ -84,12 +87,14 @@ public class EntityCrayfish extends Monster implements GeoEntity {
     public Vec3 velocity;
     public double directionlessSpeed;
     public int biomeVariant; // 0 = swamp, 1 = ice, 2 = blood
+    private boolean isJumping;
 
     public EntityCrayfish(EntityType<? extends Monster> entityType, Level level) {
         super(entityType, level);
-        this.setMaxUpStep(1.0f);
+        this.setMaxUpStep(3.0f);
         this.oldPos = this.position();
         this.newPos = this.position();
+        this.isJumping = false;
         SingletonGeoAnimatable.registerSyncedAnimatable(this);
     }
 
@@ -106,8 +111,8 @@ public class EntityCrayfish extends Monster implements GeoEntity {
 
     protected void registerGoals() {
         super.registerGoals();
-        this.goalSelector.addGoal(1, new EntityCrayfish.CrayfishMeleeAttackGoal(this, 2F, true));
-        this.goalSelector.addGoal(3, new CustomRandomStrollGoal(this, 30, 1.0D, 100, 34));
+        this.goalSelector.addGoal(1, new EntityCrayfish.CrayfishMeleeAttackGoal(this, 1.5F, true));
+        this.goalSelector.addGoal(3, new CustomRandomStrollGoal(this, 10, 1.0D, 600, 34));
         this.goalSelector.addGoal(9, new LookAtPlayerGoal(this, Player.class, 15.0F));
         this.targetSelector.addGoal(2, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, LivingEntity.class, 10, false, false, entity -> entity.getType().is(NSSTags.CRAYFISH_VICTIMS)));
@@ -146,12 +151,43 @@ public class EntityCrayfish extends Monster implements GeoEntity {
         this.newPos = this.position();
         this.velocity = this.newPos.subtract(this.oldPos);
         this.directionlessSpeed = Math.abs(Math.sqrt((velocity.x * velocity.x) + (velocity.z * velocity.z) + (velocity.z * velocity.z)));
+        if (this.isJumping && this.onGround()) {
+            this.isJumping = false;
+            int animState = this.getAnimationState();
+            if (animState == 25 || animState == 26) {
+                this.largeSlamBlockEffects(this.position());
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(), NSSSounds.CRAYFISH_SMASH.get(), this.getSoundSource(), 0.7F, 0.5F);
+                ScreenShakeEntity.ScreenShake(this.level(), this.position(), 20.0f, 0.5f, 30, 7);
+                if (animState == 26) {
+                    // Apply damage only to entities within the slam effect range
+                    double radius = 5.0;
+                    AABB hitbox = new AABB(this.position().add(-radius, -radius, -radius), this.position().add(radius, radius, radius));
+                    List<LivingEntity> victims = this.level().getEntitiesOfClass(LivingEntity.class, hitbox, entity -> entity != this);
+                    for (LivingEntity victim : victims) {
+                        victim.hurt(new DamageSource(this.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this), 20f);
+                    }
+                }
+            }
+            this.setAnimationState(0);
+        }
         super.tick();
     }
 
     @Override
     protected float getWaterSlowDown() {
-        return 1.0f;
+        return 0.8f;
+    }
+
+    @Override
+    public void travel(Vec3 travelVector) {
+        if (this.isEffectiveAi() && this.isInWater()) {
+            this.moveRelative(this.getSpeed(), travelVector);
+            this.move(MoverType.SELF, this.getDeltaMovement());
+            this.setDeltaMovement(this.getDeltaMovement().scale(0.8D));
+            this.setDeltaMovement(this.getDeltaMovement().add(0.0D, -0.08D, 0.0D));
+        } else {
+            super.travel(travelVector);
+        }
     }
 
     @Override
@@ -230,6 +266,7 @@ public class EntityCrayfish extends Monster implements GeoEntity {
         private double targetOldY;
         private double targetOldZ;
         private int meleeRange = 75;
+        private int jumpCD = 0;
         Vec3 slamOffSet = new Vec3(0, 0, 4);
         Vec3 pokeOffSet = new Vec3(0, 0.25, 5);
         Vec3 slashOffSet = new Vec3(0, -0.3, 2);
@@ -278,6 +315,7 @@ public class EntityCrayfish extends Monster implements GeoEntity {
             this.ticksUntilNextPathRecalculation = 0;
             this.ticksUntilNextAttack = 0;
             this.rangedAttackCD = 0;
+            this.jumpCD = 0;
             this.animTime = 0;
             this.mob.setAnimationState(0);
         }
@@ -288,6 +326,7 @@ public class EntityCrayfish extends Monster implements GeoEntity {
                 this.mob.setTarget(null);
             }
             this.mob.setAnimationState(0);
+            this.mob.isJumping = false;
         }
 
         public void tick() {
@@ -304,13 +343,17 @@ public class EntityCrayfish extends Monster implements GeoEntity {
                     this.mob.yBodyRot = this.mob.yHeadRot;
                     tickPiss();
                 }
+                case 25 -> tickJump();
+                case 26 -> tickJumpAttack();
                 default -> {
                     this.ticksUntilNextPathRecalculation = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
-                    this.ticksUntilNextAttack = Math.max(this.ticksUntilNextPathRecalculation - 1, 0);
+                    this.ticksUntilNextAttack = Math.max(this.ticksUntilNextAttack - 1, 0);
                     this.rangedAttackCD = Math.max(this.rangedAttackCD - 1, 0);
+                    this.jumpCD = Math.max(this.jumpCD - 1, 0);
                     this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
                     this.doMovement(target, distance);
                     this.checkForCloseRangeAttack(distance, meleeRange);
+                    this.checkForJump(target, distance);
                 }
             }
         }
@@ -351,37 +394,137 @@ public class EntityCrayfish extends Monster implements GeoEntity {
 
         protected void checkForCloseRangeAttack(double distance, double meleeRange) {
             if (distance <= meleeRange && this.ticksUntilNextAttack <= 0) {
-                int r = (this.mob.getRandom().nextInt(100) + 1);
-                if (Math.abs(this.mob.getTarget().getY() - this.mob.getY()) >= 1) {
-                    if (r <= 70) {
+                int r = this.mob.getRandom().nextInt(100) + 1;
+                double heightDiff = Math.abs(this.mob.getTarget().getY() - this.mob.getY());
+                if (heightDiff >= 1.0 && this.jumpCD <= 0 && distance <= 100) {
+                    if (r <= 60) { // Increased probability for jump attack
+                        System.out.println("Crayfish chose Jump Attack (26), distance: " + distance + ", heightDiff: " + heightDiff);
+                        this.mob.setAnimationState(26); // Jump Attack
+                        this.jumpCD = this.mob.getRandom().nextInt(40, 80); // Adjusted cooldown
+                    } else if (r <= 80) {
+                        System.out.println("Crayfish chose Slam Attack (23), distance: " + distance + ", heightDiff: " + heightDiff);
                         this.mob.setAnimationState(23); // Slam
                     } else {
+                        System.out.println("Crayfish chose Piss Attack (24), distance: " + distance + ", heightDiff: " + heightDiff);
                         this.mob.setAnimationState(24); // Piss
                     }
                 } else if (distance <= 50) {
-                    if (r <= 70) {
+                    if (r <= 50) {
+                        System.out.println("Crayfish chose Stab Attack (21), distance: " + distance);
                         this.mob.setAnimationState(21); // Stab
-                    } else if (70 < r && r <= 90) {
+                    } else if (r <= 75) {
+                        System.out.println("Crayfish chose Slash Attack (22), distance: " + distance);
                         this.mob.setAnimationState(22); // Slash
                     } else {
+                        System.out.println("Crayfish chose Slam Attack (23), distance: " + distance);
                         this.mob.setAnimationState(23); // Slam
                     }
                 } else if (distance <= 100) {
-                    if (50 < r && r <= 80) {
+                    if (r <= 40) {
+                        System.out.println("Crayfish chose Stab Attack (21), distance: " + distance);
                         this.mob.setAnimationState(21); // Stab
-                    } else if (r <= 50) {
+                    } else if (r <= 60) {
+                        System.out.println("Crayfish chose Slash Attack (22), distance: " + distance);
                         this.mob.setAnimationState(22); // Slash
+                    } else if (r <= 80 && this.jumpCD <= 0) {
+                        System.out.println("Crayfish chose Jump Attack (26), distance: " + distance);
+                        this.mob.setAnimationState(26); // Jump Attack
+                        this.jumpCD = this.mob.getRandom().nextInt(40, 80); // Adjusted cooldown
                     } else {
+                        System.out.println("Crayfish chose Slam Attack (23), distance: " + distance);
                         this.mob.setAnimationState(23); // Slam
                     }
                 }
             } else if (this.ticksUntilNextAttack <= 0 && this.rangedAttackCD <= 0) {
+                System.out.println("Crayfish chose Piss Attack (24) due to distance or cooldown, distance: " + distance);
                 this.mob.setAnimationState(24); // Piss if target too far
             }
         }
 
+        protected void checkForJump(LivingEntity target, double distance) {
+            if (this.jumpCD <= 0 && !this.mob.isJumping && this.mob.onGround() && Math.abs(target.getY() - this.mob.getY()) >= 0.5 && distance <= 100) {
+                int r = this.mob.getRandom().nextInt(100) + 1;
+                if (r <= 50) { // 50% chance for regular jump when conditions are met
+                    System.out.println("Crayfish triggered Jump (25), distance: " + distance + ", heightDiff: " + Math.abs(target.getY() - this.mob.getY()));
+                    this.mob.setAnimationState(25);
+                    this.mob.isJumping = true;
+                    this.animTime = 0;
+                    this.jumpCD = this.mob.getRandom().nextInt(40, 80);
+                    Vec3 targetPos = target.position();
+                    Vec3 mobPos = this.mob.position();
+                    double dx = targetPos.x - mobPos.x;
+                    double dy = targetPos.y - mobPos.y;
+                    double dz = targetPos.z - mobPos.z;
+                    double flatDist = Math.sqrt(dx * dx + dz * dz);
+                    double jumpHeight = Math.min(dy + 8.0, 16.0);
+                    double horizontalSpeed = Math.min(flatDist / 12.0, 1.0);
+                    this.mob.setDeltaMovement(dx / flatDist * horizontalSpeed, Math.sqrt(2 * 0.08 * jumpHeight), dz / flatDist * horizontalSpeed);
+                }
+            }
+        }
+
+        protected void tickJump() {
+            animTime++;
+            this.mob.getNavigation().stop();
+            this.mob.setAnimationState(25);
+            if (animTime >= 20 || this.mob.onGround()) {
+                this.animTime = 0;
+                this.mob.setAnimationState(0);
+                this.mob.isJumping = false;
+                this.ticksUntilNextPathRecalculation = 0;
+            }
+        }
+
+        protected void tickJumpAttack() {
+            animTime++;
+            this.mob.getNavigation().stop();
+            if (animTime <= 20) {
+                this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
+                this.mob.yBodyRot = this.mob.yHeadRot;
+                this.mob.setAnimationState(23); // Slam animation during prep
+            } else if (animTime == 21) {
+                LivingEntity target = this.mob.getTarget();
+                this.mob.isJumping = true;
+                this.mob.setAnimationState(25); // Air animation during jump
+                Vec3 targetPos = target.position();
+                Vec3 mobPos = this.mob.position();
+                double dx = targetPos.x - mobPos.x;
+                double dy = targetPos.y - mobPos.y;
+                double dz = targetPos.z - mobPos.z;
+                double flatDist = Math.sqrt(dx * dx + dz * dz);
+                double jumpHeight = Math.min(dy + 8.0, 16.0);
+                double horizontalSpeed = Math.min(flatDist / 12.0, 1.0);
+                this.mob.setDeltaMovement(dx / flatDist * horizontalSpeed, Math.sqrt(2 * 0.08 * jumpHeight), dz / flatDist * horizontalSpeed);
+            } else if (animTime >= 40 || this.mob.onGround()) {
+                this.animTime = 0;
+                double rot = this.mob.yBodyRot * (Math.PI / 180);
+                Vec3 baseOffset = new Vec3(0, 0, 4);
+                Vec3 rotatedOffset = new Vec3(
+                        baseOffset.x * Math.cos(rot) - baseOffset.z * Math.sin(rot),
+                        baseOffset.y,
+                        baseOffset.x * Math.sin(rot) + baseOffset.z * Math.cos(rot)
+                );
+                Vec3 attackPos = this.mob.position().add(rotatedOffset);
+                // Apply damage only to entities within the slam effect range
+                double radius = 5.0;
+                AABB hitbox = new AABB(attackPos.add(-radius, -radius, -radius), attackPos.add(radius, radius, radius));
+                List<LivingEntity> victims = this.mob.level().getEntitiesOfClass(LivingEntity.class, hitbox, entity -> entity != this.mob);
+                for (LivingEntity victim : victims) {
+                    victim.hurt(new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 20f);
+                }
+                this.mob.level().playSound(null, attackPos.x, attackPos.y, attackPos.z, NSSSounds.CRAYFISH_SMASH.get(), this.mob.getSoundSource(), 0.7F, 0.5F);
+                ScreenShakeEntity.ScreenShake(this.mob.level(), attackPos, 20.0f, 0.5f, 30, 7);
+                this.mob.largeSlamBlockEffects(attackPos);
+                this.mob.setAnimationState(0);
+                this.mob.isJumping = false;
+                this.ticksUntilNextPathRecalculation = 0;
+                this.jumpCD = this.mob.getRandom().nextInt(40, 80);
+                this.resetAttackCooldown(20);
+            }
+        }
+
         protected boolean getRangeCheck() {
-            return this.mob.distanceToSqr(this.mob.getTarget().getX(), this.mob.getTarget().getY(), this.mob.getTarget().getZ())
+            return this.mob.distanceToSqr(this.mob.getTarget().getX(), this.mob.getTarget().getY(), this.mob.getZ())
                     <= 1.8F * this.getAttackReachSqr(this.mob.getTarget());
         }
 
@@ -402,10 +545,8 @@ public class EntityCrayfish extends Monster implements GeoEntity {
         }
 
         protected void tickRightClawAttack() {
-            if (animTime <= 3) {
-                this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
-                this.mob.yBodyRot = this.mob.yHeadRot;
-            }
+            this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
+            this.mob.yBodyRot = this.mob.yHeadRot;
             this.mob.getNavigation().stop();
             animTime++;
             if (animTime == 6) {
@@ -420,16 +561,14 @@ public class EntityCrayfish extends Monster implements GeoEntity {
         }
 
         protected void tickSlamAttack() {
-            animTime++;
+            this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
+            this.mob.yBodyRot = this.mob.yHeadRot;
             this.mob.getNavigation().stop();
-            if (animTime <= 3) {
-                this.mob.lookAt(this.mob.getTarget(), 100000, 100000);
-                this.mob.yBodyRot = this.mob.yHeadRot;
-            }
-            if (animTime == 19) {
+            animTime++;
+            if (animTime == 20) {
                 performSlamAttack();
             }
-            if (animTime >= 24) {
+            if (animTime >= 30) {
                 animTime = 0;
                 this.mob.setAnimationState(0);
                 this.resetAttackCooldown(20);
@@ -481,24 +620,25 @@ public class EntityCrayfish extends Monster implements GeoEntity {
 
             Vec3 finalTargetPos = tTempPos.add(0, target.getEyeHeight() * 0.5, 0);
 
+            if (this.mob.level() instanceof ServerLevel serverLevel) {
+                serverLevel.playSound(null, finalTargetPos.x, finalTargetPos.y, finalTargetPos.z, NSSSounds.CRAYFISH_BLAST.get(), this.mob.getSoundSource(), 1.0F, 0.8F + this.mob.getRandom().nextFloat() * 0.4F);
+            }
+
             if (this.mob.getVariant() <= 14 && 10 <= this.mob.getVariant()) {
                 EntityBloodWater urine = new EntityBloodWater(NSSEntities.BLOODWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
-                urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
                 this.mob.level().addFreshEntity(urine);
             } else if (this.mob.getVariant() <= 9 && 5 <= this.mob.getVariant()) {
                 EntityIceWater urine = new EntityIceWater(NSSEntities.ICEWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
-                urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
                 this.mob.level().addFreshEntity(urine);
             } else {
                 EntityToxicWater urine = new EntityToxicWater(NSSEntities.TOXICWATER.get(), this.mob.level());
                 urine.setOwner(this.mob);
-                urine.setInvisible(true);
                 urine.moveTo(this.mob.getX(), this.mob.getY() + 2, this.mob.getZ());
                 urine.setTargetPos(finalTargetPos);
                 this.mob.level().addFreshEntity(urine);
@@ -510,9 +650,24 @@ public class EntityCrayfish extends Monster implements GeoEntity {
 
         protected void performSlamAttack() {
             this.mob.setDeltaMovement(this.mob.getDeltaMovement().scale(0));
-            this.mob.playSound(NSSSounds.CRAYFISH_ATTACK.get(), 0.5F, 0.5F);
-            PisslikeHitboxes.PivotedPolyHitCheck(this.mob, this.slamOffSet, 3f, 3f, 3f, (ServerLevel) this.mob.level(), 15f,
-                    new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 2f, true);
+            this.mob.playSound(NSSSounds.CRAYFISH_SMASH.get(), 0.5F, 0.5F);
+            double rot = this.mob.yBodyRot * (Math.PI / 180);
+            Vec3 baseOffset = new Vec3(0, 0, 4);
+            Vec3 rotatedOffset = new Vec3(
+                    baseOffset.x * Math.cos(rot) - baseOffset.z * Math.sin(rot),
+                    baseOffset.y,
+                    baseOffset.x * Math.sin(rot) + baseOffset.z * Math.cos(rot)
+            );
+            Vec3 attackPos = this.mob.position().add(rotatedOffset);
+            double radius = 3.0;
+            AABB hitbox = new AABB(attackPos.add(-radius, -radius, -radius), attackPos.add(radius, radius, radius));
+            List<LivingEntity> victims = this.mob.level().getEntitiesOfClass(LivingEntity.class, hitbox, entity -> entity != this.mob);
+            for (LivingEntity victim : victims) {
+                victim.hurt(new DamageSource(this.mob.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolderOrThrow(DamageTypes.MOB_ATTACK), this.mob), 15f);
+            }
+            this.mob.level().playSound(null, attackPos.x, attackPos.y, attackPos.z, NSSSounds.CRAYFISH_SMASH.get(), this.mob.getSoundSource(), 0.5F, 0.5F);
+            ScreenShakeEntity.ScreenShake(this.mob.level(), attackPos, 15.0f, 0.4f, 20, 5);
+            this.mob.slamBlockEffects(attackPos);
         }
 
         protected void performLeftClawAttack() {
@@ -537,16 +692,84 @@ public class EntityCrayfish extends Monster implements GeoEntity {
             return this.ticksUntilNextAttack <= 0;
         }
 
-        protected int getTicksUntilNextAttack() {
-            return this.ticksUntilNextAttack;
+        protected int getAttackReachSqr(LivingEntity entity) {
+            return (int) (this.mob.getBbWidth() * 2.5F * this.mob.getBbWidth() * 1.8F + entity.getBbWidth());
         }
+    }
 
-        protected int getAttackInterval() {
-            return 5;
+    public void slamBlockEffects(Vec3 attackPos) {
+        if (!this.level().isClientSide && net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(this.level(), this)) {
+            double radius = 3.0;
+            int numBlocks = Math.min(Mth.ceil(radius * radius * Math.PI / 2), 16);
+            RandomSource random = this.getRandom();
+            for (int i = 0; i < numBlocks; i++) {
+                double r = radius * Math.sqrt(random.nextDouble());
+                double theta = random.nextDouble() * 2 * Math.PI;
+                double px = attackPos.x + r * Math.cos(theta);
+                double pz = attackPos.z + r * Math.sin(theta);
+                int hitX = Mth.floor(px);
+                int hitZ = Mth.floor(pz);
+                int hitY = Mth.floor(attackPos.y);
+                BlockPos pos = new BlockPos(hitX, hitY, hitZ);
+                BlockState block = this.level().getBlockState(pos.below());
+                int maxDepth = 256;
+                for (int depthCount = 0; depthCount < maxDepth; depthCount++) {
+                    if (block.getRenderShape() == RenderShape.MODEL) {
+                        break;
+                    }
+                    pos = pos.below();
+                    block = this.level().getBlockState(pos);
+                }
+                if (block.getRenderShape() != RenderShape.MODEL) {
+                    block = Blocks.AIR.defaultBlockState();
+                }
+                FallingBlockEntity fallingBlock = new FallingBlockEntity(this.level(), hitX + 0.5D, hitY + 1.0D, hitZ + 0.5D, block, 20);
+                fallingBlock.push(0, 0.2D + random.nextGaussian() * 0.15D, 0);
+                this.level().addFreshEntity(fallingBlock);
+                if (block.is(NSSTags.CRAYFISH_BREAKABLES)) {
+                    ((ServerLevel) this.level()).sendParticles(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, block),
+                            hitX + 0.5D, hitY, hitZ + 0.5D, 10, 0.5, 0.5, 0.5, 0.1);
+                    this.level().destroyBlock(pos, true, this);
+                }
+            }
         }
+    }
 
-        protected double getAttackReachSqr(LivingEntity entity) {
-            return (double) (this.mob.getBbWidth() * 2.5F * this.mob.getBbWidth() * 1.8F + entity.getBbWidth());
+    protected void largeSlamBlockEffects(Vec3 attackPos) {
+        if (!this.level().isClientSide && net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(this.level(), this)) {
+            double radius = 5.0;
+            int numBlocks = Math.min(Mth.ceil(radius * radius * Math.PI / 2), 25);
+            RandomSource random = this.getRandom();
+            for (int i = 0; i < numBlocks; i++) {
+                double r = radius * Math.sqrt(random.nextDouble());
+                double theta = random.nextDouble() * 2 * Math.PI;
+                double px = attackPos.x + r * Math.cos(theta);
+                double pz = attackPos.z + r * Math.sin(theta);
+                int hitX = Mth.floor(px);
+                int hitZ = Mth.floor(pz);
+                int hitY = Mth.floor(attackPos.y);
+                BlockPos pos = new BlockPos(hitX, hitY, hitZ);
+                BlockState block = this.level().getBlockState(pos.below());
+                int maxDepth = 256;
+                for (int depthCount = 0; depthCount < maxDepth; depthCount++) {
+                    if (block.getRenderShape() == RenderShape.MODEL) {
+                        break;
+                    }
+                    pos = pos.below();
+                    block = this.level().getBlockState(pos);
+                }
+                if (block.getRenderShape() != RenderShape.MODEL) {
+                    block = Blocks.AIR.defaultBlockState();
+                }
+                FallingBlockEntity fallingBlock = new FallingBlockEntity(this.level(), hitX + 0.5D, hitY + 1.0D, hitZ + 0.5D, block, 30);
+                fallingBlock.push(0, 0.3D + random.nextGaussian() * 0.2D, 0);
+                this.level().addFreshEntity(fallingBlock);
+                if (block.is(NSSTags.CRAYFISH_BREAKABLES)) {
+                    ((ServerLevel) this.level()).sendParticles(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, block),
+                            hitX + 0.5D, hitY, hitZ + 0.5D, 15, 0.75, 0.75, 0.75, 0.15);
+                    this.level().destroyBlock(pos, true, this);
+                }
+            }
         }
     }
 
@@ -625,6 +848,14 @@ public class EntityCrayfish extends Monster implements GeoEntity {
             case 24:
                 controller.setAnimation(SNIPE_ANIM);
                 controller.setAnimationSpeed(0.8F);
+                return PlayState.CONTINUE;
+            case 25:
+                controller.setAnimation(AIR_ANIM);
+                controller.setAnimationSpeed(1.0F);
+                return PlayState.CONTINUE;
+            case 26:
+                controller.setAnimation(AIR_ANIM);
+                controller.setAnimationSpeed(1.0F);
                 return PlayState.CONTINUE;
             default:
                 double speed = Math.sqrt(this.getDeltaMovement().x * this.getDeltaMovement().x + this.getDeltaMovement().z * this.getDeltaMovement().z);
@@ -741,3 +972,4 @@ public class EntityCrayfish extends Monster implements GeoEntity {
         }
     }
 }
+//

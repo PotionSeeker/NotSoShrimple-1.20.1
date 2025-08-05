@@ -15,6 +15,8 @@ public class NSSSounds {
     public static final RegistryObject<SoundEvent> CRAYFISH_ATTACK = createSoundEvent("crayfish_attack");
     public static final RegistryObject<SoundEvent> CRAYFISH_DEATH = createSoundEvent("crayfish_death");
     public static final RegistryObject<SoundEvent> CRAYFISH_SCUTTLE = createSoundEvent("crayfish_scuttle");
+    public static final RegistryObject<SoundEvent> CRAYFISH_SMASH = createSoundEvent("crayfish_smash");
+    public static final RegistryObject<SoundEvent> CRAYFISH_BLAST = createSoundEvent("crayfish_blast");
 
     private static RegistryObject<SoundEvent> createSoundEvent(final String soundName) {
         return DEF_REG.register(soundName, () -> SoundEvent.createVariableRangeEvent(new ResourceLocation(NotSoShrimple.MODID, soundName)));
